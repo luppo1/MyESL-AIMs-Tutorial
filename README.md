@@ -11,13 +11,44 @@ This tutorial allows full reproduction of the analysis using a small example dat
 
 ---
 
+## Directory Structure
+
+```
+MyESL-AIMs-Tutorial/
+│
+├── data/
+│   ├── yri_vs_ceu.vcf.gz
+│   ├── yri_vs_ceu.vcf.gz.csi
+│   └── 1000G_SampleListWithLocations.txt
+│
+├── scripts/
+│   └── vcf2fasta.py
+│
+├── MyESL/                # cloned during Step 1
+│
+├── yri_vs_ceu/           # generated during pipeline
+│   ├── fasta/
+│   │   ├── *.fasta
+│   │   └── alignment_list.txt
+│   ├── positions/
+│   │   └── *_positions.txt
+│
+├── results_yri_ceu/
+│   └── PSS_classes_summary.txt
+│
+├── final_AIMs.txt
+├── PSS_classes_matched.txt
+│
+└── README.md
+```
+
+---
+
 ## Quick Start
 
 ```bash
 # Clone this repository
 git clone https://github.com/luppo1/MyESL-AIMs-Tutorial.git
-
-# Enter the repository
 cd MyESL-AIMs-Tutorial
 ```
 
@@ -32,19 +63,10 @@ cd MyESL-AIMs-Tutorial
 ## Step 1: Install MyESL
 
 ```bash
-# Clone MyESL repository
 git clone https://github.com/kumarlabgit/MyESL.git
-
-# Enter MyESL directory
 cd MyESL/
-
-# Move to binary folder
 cd bin/
-
-# Give execute permissions
 chmod 777 *
-
-# Return
 cd ..
 
 # Test installation
@@ -70,16 +92,25 @@ data/yri_vs_ceu.vcf.gz
 ## Step 3: Convert VCF to FASTA
 
 ```bash
-cd data
+# Make sure bcftools is already added to PATH
+# Example: export PATH=/path/to/bcftools/bin:$PATH
+
+# In my case:
+export PATH=/home/tup97263/work/tools/bcftools-1.17/bin:$PATH
 
 # Extract genomic range
-start=$(bcftools view yri_vs_ceu.vcf.gz | grep -v '^#' | head -n 1 | cut -f 2)
-end=$(bcftools view yri_vs_ceu.vcf.gz | grep -v '^#' | tail -n 1 | cut -f 2)
+start=$(bcftools view ../data/yri_vs_ceu.vcf.gz | grep -v '^#' | head -n 1 | cut -f 2)
+end=$(bcftools view ../data/yri_vs_ceu.vcf.gz | grep -v '^#' | tail -n 1 | cut -f 2)
 
 # Convert to FASTA
-python3 ../scripts/vcf2fasta.py yri_vs_ceu.vcf.gz 22 --start "$start" --end "$end"
+# Set the chromosome number
+chr=22
+python3 ../scripts/vcf2fasta.py ../data/yri_vs_ceu.vcf.gz ${chr} --start "$start" --end "$end"
+
+# This creates a directory named yri_vs_ceu containing the fasta and positions files
 
 # Organize outputs
+cd yri_vs_ceu
 mkdir fasta positions
 mv *_positions.txt positions/
 mv *.fasta fasta/
@@ -92,10 +123,11 @@ mv *.fasta fasta/
 ```bash
 cd fasta
 
-# Clean headers
+# Clean the headers
 for file in *.fasta; do
     sed 's/>\([^:]*\):.*/>\1/g' "$file" > tmp && mv tmp "$file"
 done
+
 for file in *.fasta; do
     awk '/^>/{print; next} {print substr($0,1,5000)}' "$file" > tmp && mv tmp "$file"
 done
@@ -103,48 +135,66 @@ done
 
 ---
 
-## Step 5: Alignment List
+## Step 5: Create Alignment List
 
 ```bash
 ls "$PWD"/*.fasta > alignment_list.txt
+
+# This contains the paths to the fasta files
 ```
 
 ---
 
-## Step 6: Classes File
+## Step 6: Create Classes File
 
 ```bash
+# Go back to the main MyESL directory
+cd ../../
+
 awk 'BEGIN {OFS="\t"} $2=="CEU"{print $1,-1} $2=="YRI"{print $1,1}' \
-../1000G_SampleListWithLocations.txt > classes.txt
+../data/1000G_SampleListWithLocations.txt > classes.txt
+
+# This contains a user-defined hypothesis. It has two columns, which are tab-separated. The first column contains species names, and the second column contains the response value for the species (+1/-1).
 ```
 
 ---
 
-## Step 7: Run MyESL
+## Step 7: Run a basic ESL Model
 
 ```bash
-cd ../..
-
-python3 MyESL.py data/fasta/alignment_list.txt \
-    --classes data/fasta/classes.txt \
+python3 MyESL.py yri_vs_ceu/fasta/alignment_list.txt \
+    --classes classes.txt \
     --stats_out PGHS \
     --lambda1 0.1 \
     --output results_yri_ceu
 ```
 
+Parameters:
+```
+--classes: the user-defined hypothesis file
+--stats_out: Output statistics
+--lambda1: The site sparsity parameter that ranges from 0 to 1
+--output: The name of the output directory where all results from MyESL analysis will be stored
+
+```
+
 ---
 
-## Step 8: Map Positions
+## Step 8: Map ESL's Output to the Positions obtained from the vcf file
 
 ```bash
+# ESL's out is located in: MyESL/results_yri_ceu, and the file of interest is PSS_classes_summary.txt 
+
 awk 'FNR==NR{pos[$1]=$2; next} $1 in pos {
     split(pos[$1],a,":");
     print a[1], a[2], $2
-}' <(cat data/positions/*positions.txt) \
+}' <(cat yri_vs_ceu/positions/*positions.txt) \
 results_yri_ceu/PSS_classes_summary.txt \
 > PSS_classes_matched.txt
 
 wc -l PSS_classes_matched.txt results_yri_ceu/PSS_classes_summary.txt
+
+# The number of rows from two files must be the same, i.e. 2990
 ```
 
 ---
@@ -152,12 +202,14 @@ wc -l PSS_classes_matched.txt results_yri_ceu/PSS_classes_summary.txt
 ## Step 9: Final AIMs
 
 ```bash
+# Map ESL's output to the vcf file and extract the SNP IDs, Position, Chromosome and add the ESL's PSS scores
+
 awk 'BEGIN{print "Chrom\tSNPID\tPosition\tPSS"}
 NR==FNR{key[$1"_"$2]=$3; next}
 ($1"_"$2) in key {
     print $1, $3, $2, key[$1"_"$2]
 }' PSS_classes_matched.txt \
-<(bcftools view -H data/yri_vs_ceu.vcf.gz) \
+<(bcftools view -H ../data/yri_vs_ceu.vcf.gz) \
 > final_AIMs.txt
 ```
 
@@ -171,18 +223,10 @@ final_AIMs.txt
 
 ---
 
-## Validation
-
-```bash
-diff final_AIMs.txt results/final_AIMs.txt
-```
-
----
-
 ## Citation
-Doughan et al.
+Doughan et al. (2026) — manuscript in preparation
 
 ---
 
 ## Contact
-Open a GitHub issue for questions.
+albert.doughan@temple.edu
