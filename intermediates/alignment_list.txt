@@ -1,0 +1,4 @@
+/home/tup97263/work/thesis/esl/test_esl/MyESL/yri_vs_ceu/fasta/22_16051453-25838186.fasta
+/home/tup97263/work/thesis/esl/test_esl/MyESL/yri_vs_ceu/fasta/22_25839192-35426188.fasta
+/home/tup97263/work/thesis/esl/test_esl/MyESL/yri_vs_ceu/fasta/22_35426801-45565250.fasta
+/home/tup97263/work/thesis/esl/test_esl/MyESL/yri_vs_ceu/fasta/22_45570114-51240820.fasta
