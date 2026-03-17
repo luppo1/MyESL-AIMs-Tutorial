@@ -223,10 +223,9 @@ final_AIMs.txt
 
 ---
 
-## Directory Structure
+## Showing the head of final_AIMs.txt
 
 ```
-head of final_AIMs.txt
 Chrom   SNPID        Position    PSS
 22      rs226522     45575468    0.000885789020685479
 22      rs6007494    45581020    0.0010501827928237617
